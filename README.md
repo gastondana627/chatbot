@@ -1,4 +1,4 @@
-# Teacher Chatbot
+# Chatbot(Teacher Chatbot)
 
 This project is a chatbot application designed to provide quick responses about a teacher's schedule, hours taught, courses, and more. It uses **Google Generative AI** (Gemini) to process queries and give insightful responses based on predefined data about the teacher.
 
