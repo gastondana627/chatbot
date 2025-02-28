@@ -1,5 +1,9 @@
 .streamlit/secrets.toml
 
+# Ignore local environment & secrets
+myenv/
+secrets.toml
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

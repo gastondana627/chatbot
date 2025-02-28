@@ -1,56 +1,115 @@
+import google.generativeai as genai
 import streamlit as st
-from openai import OpenAI
+import re  # Import the 're' module
 
-# Show title and description.
-st.title("💬 Chatbot")
-st.write(
-    "This is a simple chatbot that uses OpenAI's GPT-3.5 model to generate responses. "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
-    "You can also learn how to build this app step by step by [following our tutorial](https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps)."
-)
+# This MUST be the first command in the file
+st.set_page_config(page_title="Teacher Chatbot", layout="wide")
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
-openai_api_key = st.text_input("OpenAI API Key", type="password")
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
-else:
+# Configure Google API from Streamlit secrets
+try:
+    GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]  # Read API key from secrets.toml
 
-    # Create an OpenAI client.
-    client = OpenAI(api_key=openai_api_key)
+    if not GOOGLE_API_KEY:
+        raise ValueError("GOOGLE_API_KEY is missing in secrets.toml.")
 
-    # Create a session state variable to store the chat messages. This ensures that the
-    # messages persist across reruns.
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+    genai.configure(api_key=GOOGLE_API_KEY)
+    model = genai.GenerativeModel('gemini-pro')
 
-    # Display the existing chat messages via `st.chat_message`.
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+except ValueError as e:
+    st.error(f"Error: {e}")
+    st.stop()
+except Exception as e:
+    st.error(f"Error initializing the Gemini model: {e}")
+    st.stop()
 
-    # Create a chat input field to allow the user to enter a message. This will display
-    # automatically at the bottom of the page.
-    if prompt := st.chat_input("What is up?"):
+# Teacher data with courses, weeks taught, and hours per session
+teacher_data = {
+    "name": "Jane Doe",
+    "hours_taught": 120,
+    "courses_taught": ["Math 101", "Science 202", "History 303"],
+    "papers_graded": 200,
+    "semester_data": {
+        "Math 101": {
+            "fall_2024": {"weeks_taught": 12, "hours_per_week": 6, "days": ["Monday", "Wednesday", "Friday"]},
+            "spring_2024": {"weeks_taught": 10, "hours_per_week": 4, "days": ["Tuesday", "Thursday"]}
+        },
+        "Science 202": {
+            "fall_2024": {"weeks_taught": 12, "hours_per_week": 6, "days": ["Monday", "Wednesday", "Friday"]}
+        },
+        "History 303": {
+            "fall_2024": {"weeks_taught": 12, "hours_per_week": 6, "days": ["Monday", "Wednesday", "Friday"]}
+        }
+    },
+    "current_schedule": {
+        "Monday": "Math 101 (9:00-11:00 AM)",
+        "Wednesday": "Science 202 (10:00-12:00 PM)",
+        "Friday": "History 303 (1:00-3:00 PM)"
+    }
+}
 
-        # Store and display the current prompt.
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+# Function to handle chatbot response
+def chatbot_response(prompt):
+    prompt_lower = prompt.lower()
+    print(f"[DEBUG] Received prompt: {prompt_lower}")
 
-        # Generate a response using the OpenAI API.
-        stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
-            ],
-            stream=True,
-        )
+    # Local Data:  Regex with
+    match_hours = re.search(r"(?:how many|what is the total|can you tell me the|how much) (?:hours|time) (?:were taught|did the instructor teach|was spent teaching|instruction time was given) (?:in|for|of)? ?([a-z\s\d]+)", prompt_lower)
 
-        # Stream the response to the chat using `st.write_stream`, then store it in 
-        # session state.
-        with st.chat_message("assistant"):
-            response = st.write_stream(stream)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+    if match_hours:
+        course = match_hours.group(1).strip()
+        total_hours = 0
+        semesters = teacher_data['semester_data'].get(course.title(), {})
+
+        if semesters:
+            for semester, data in semesters.items():
+                total_hours += data.get("weeks_taught", 0) * data.get("hours_per_week", 0)
+            return f"Jane Doe has taught {total_hours} hours in {course}."
+        else:
+            return f"No data available for {course}."
+
+    elif "what courses does jane doe teach" in prompt_lower:
+        try:
+            response = model.generate_content("Provide the list of courses: Math 101, Science 202, History 303")
+            return response.text
+        except Exception as e:
+            return f"Could not retrieve data. Error: {e}"
+
+    elif "what is jane doe's schedule" in prompt_lower:
+        try:
+            response = model.generate_content("Format the schedule as: Monday: Math 101 (9:00-11:00 AM), Wednesday: Science 202 (10:00-12:00 PM), Friday: History 303 (1:00-3:00 PM)")
+            return response.text
+        except Exception as e:
+            return f"Could not retrieve data. Error: {e}"
+
+    else:
+        return "I'm sorry, I don't have the answer."
+
+
+# Streamlit UI
+st.title("📚 Teacher Management Chatbot")
+st.write("Ask the chatbot about your teaching stats, schedule, or anything related to your work!")
+
+st.sidebar.header("📊 Teacher Data Overview")
+st.sidebar.write(f"**Name:** {teacher_data['name']}")
+st.sidebar.write(f"**Hours Taught:** {teacher_data['hours_taught']} hours")
+st.sidebar.write(f"**Courses Taught:** {', '.join(teacher_data['courses_taught'])}")
+st.sidebar.write(f"**Papers Graded:** {teacher_data['papers_graded']}")
+
+st.sidebar.subheader("📅 Weekly Schedule")
+for day, schedule in teacher_data['current_schedule'].items():
+    st.sidebar.write(f"**{day}:** {schedule}")
+
+st.subheader("💬 Chat with the Assistant")
+user_input = st.text_input("Enter your question:", placeholder="E.g., How many hours have I taught this week?")
+submit_button = st.button("Send")
+
+if submit_button and user_input:
+    with st.spinner("Thinking..."):
+        response = chatbot_response(user_input)
+        st.success("Response:")
+        st.write(response)
+
+st.subheader("🌟 Feedback")
+feedback = st.text_area("Share your feedback about the chatbot!")
+if st.button("Submit Feedback"):
+    st.success("Thank you for your feedback!")
