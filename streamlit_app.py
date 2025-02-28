@@ -1,19 +1,17 @@
 import google.generativeai as genai
 import streamlit as st
-import re  # Import the 're' module
+import re
 
 # This MUST be the first command in the file
 st.set_page_config(page_title="Teacher Chatbot", layout="wide")
 
 # Configure Google API from Streamlit secrets
 try:
-    # Update the key access to match the secrets.toml structure
-    GOOGLE_API_KEY = st.secrets["google"]["api_key"]  # Access the API key from secrets.toml
+    GOOGLE_API_KEY = st.secrets["google"]["api_key"]  # Read API key from secrets.toml
 
     if not GOOGLE_API_KEY:
         raise ValueError("GOOGLE_API_KEY is missing in secrets.toml.")
 
-    # Initialize the generative model
     genai.configure(api_key=GOOGLE_API_KEY)
     model = genai.GenerativeModel('gemini-pro')
 
@@ -54,7 +52,7 @@ def chatbot_response(prompt):
     prompt_lower = prompt.lower()
     print(f"[DEBUG] Received prompt: {prompt_lower}")
 
-    # Local Data: Regex for hours taught
+    # Local Data: Regex for detecting how many hours taught for a specific course
     match_hours = re.search(r"(?:how many|what is the total|can you tell me the|how much) (?:hours|time) (?:were taught|did the instructor teach|was spent teaching|instruction time was given) (?:in|for|of)? ?([a-z\s\d]+)", prompt_lower)
 
     if match_hours:
@@ -69,19 +67,15 @@ def chatbot_response(prompt):
         else:
             return f"No data available for {course}."
 
+    # What courses does Jane Doe teach?
     elif "what courses does jane doe teach" in prompt_lower:
-        try:
-            response = model.generate_content("Provide the list of courses: Math 101, Science 202, History 303")
-            return response.text
-        except Exception as e:
-            return f"Could not retrieve data. Error: {e}"
+        courses = ", ".join(teacher_data["courses_taught"])
+        return f"Jane Doe teaches the following courses: {courses}"
 
-    elif "what is jane doe's schedule" in prompt_lower:
-        try:
-            response = model.generate_content("Format the schedule as: Monday: Math 101 (9:00-11:00 AM), Wednesday: Science 202 (10:00-12:00 PM), Friday: History 303 (1:00-3:00 PM)")
-            return response.text
-        except Exception as e:
-            return f"Could not retrieve data. Error: {e}"
+    # What is Jane Doe's schedule? (making the prompt more flexible)
+    elif re.search(r"(what|can you tell me) (is|are) jane doe['’]s? (schedule|class|timetable)", prompt_lower):
+        schedule = "\n".join([f"**{day}:** {course}" for day, course in teacher_data["current_schedule"].items()])
+        return f"Here is Jane Doe's weekly schedule:\n\n{schedule}"
 
     else:
         return "I'm sorry, I don't have the answer."
@@ -102,7 +96,7 @@ for day, schedule in teacher_data['current_schedule'].items():
     st.sidebar.write(f"**{day}:** {schedule}")
 
 st.subheader("💬 Chat with the Assistant")
-user_input = st.text_input("Enter your question:", placeholder="E.g., How many hours have I taught this week?")
+user_input = st.text_input("Enter your question:", placeholder="E.g., How many hours have I taught in Math 101?")
 submit_button = st.button("Send")
 
 if submit_button and user_input:
