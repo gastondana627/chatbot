@@ -7,11 +7,13 @@ st.set_page_config(page_title="Teacher Chatbot", layout="wide")
 
 # Configure Google API from Streamlit secrets
 try:
-    GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]  # Read API key from secrets.toml
+    # Update the key access to match the secrets.toml structure
+    GOOGLE_API_KEY = st.secrets["google"]["api_key"]  # Access the API key from secrets.toml
 
     if not GOOGLE_API_KEY:
         raise ValueError("GOOGLE_API_KEY is missing in secrets.toml.")
 
+    # Initialize the generative model
     genai.configure(api_key=GOOGLE_API_KEY)
     model = genai.GenerativeModel('gemini-pro')
 
@@ -52,7 +54,7 @@ def chatbot_response(prompt):
     prompt_lower = prompt.lower()
     print(f"[DEBUG] Received prompt: {prompt_lower}")
 
-    # Local Data:  Regex with
+    # Local Data: Regex for hours taught
     match_hours = re.search(r"(?:how many|what is the total|can you tell me the|how much) (?:hours|time) (?:were taught|did the instructor teach|was spent teaching|instruction time was given) (?:in|for|of)? ?([a-z\s\d]+)", prompt_lower)
 
     if match_hours:
